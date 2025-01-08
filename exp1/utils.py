@@ -86,7 +86,7 @@ class DataSeries(BaseSeries):
             self.path = path
             df = pd.read_excel(path, index_col=0)
             self.data = df['y'].to_numpy()
-            self.index = df.index.astype(float).to_numpy()
+            self.index = df.index.astype(int).to_numpy()
         elif data is not None:
             self.data = data
             self.index = np.linspace(0, 1, len(data), dtype=float) if index is None else index
@@ -108,14 +108,14 @@ class DataSeries(BaseSeries):
         
         data = self.data * self.denormalize_params[1] + self.denormalize_params[0]
         index = self.index * (self.denormalize_params[2] - self.denormalize_params[3]) + self.denormalize_params[3]
-        return DataSeries(data=data, index=index)
+        return DataSeries(data=data, index=index.astype(int))
     
     def _denormalize_number(self, number):
         return number * self.denormalize_params[1] + self.denormalize_params[0]
     
-    def remove_outliers(self):
-        self._remove_outliers_global(3)
-        self._remove_outliers_continuos(2, 0.1)
+    def remove_outliers(self, global_threshold=2, local_threshold=3, local_lookback=0.05):
+        self._remove_outliers_global(global_threshold)
+        self._remove_outliers_continuos(local_threshold, local_lookback)
         return self
 
     def _remove_outliers_global(self, threshold=3):
@@ -125,13 +125,14 @@ class DataSeries(BaseSeries):
     
     def _remove_outliers_continuos(self, threshold=3, lookback=0.1):
         lookback = int(len(self.data) * lookback)
+        index_format = self.index.dtype
+        self.index = self.index.astype(float)
         for i in range(lookback, len(self.data)):
             z = np.abs((self.data[i-lookback:i] - self.data[i-lookback:i].mean()) / (self.data[i-lookback:i].std() + 1e-6))
-            if z[-1] > threshold:
-                self.data[i] = np.nan
-                self.index[i] = np.nan
+            self.data[i-lookback:i] = np.where(z > threshold, np.nan, self.data[i-lookback:i])
+            self.index[i-lookback:i] = np.where(z > threshold, np.nan, self.index[i-lookback:i])
         self.data = self.data[~np.isnan(self.data)]
-        self.index = self.index[~np.isnan(self.index)]
+        self.index = self.index[~np.isnan(self.index)].astype(index_format)
 
     def plot(self, mode=None, **kwargs):
         plt.plot(self.index, self.data, **kwargs)
@@ -223,18 +224,23 @@ def H(data, kind='ramp', **kwargs):
         
         return H_piecewise.T, piecewise_denoise
     
-def plot_multiple(series_list, titles=None, labels=None):
+def plot_multiple(series_list, titles=None, labels=None, suptitle=None, dark_mode=True):
     series_list = list(series_list)
+    
+    plt.style.use('bmh')
 
     plt.figure(figsize=(18, 3))
+    if suptitle is not None:
+        plt.suptitle(suptitle, y=1.1)
 
     for i, series in enumerate(series_list):
-        plt.subplot(1, len(series_list), i + 1)
+        ax = plt.subplot(1, len(series_list), i + 1)
 
         if isinstance(series, tuple):
             for l_idx, serie in enumerate(series):
                 serie.plot('add', label=labels[l_idx] if labels is not None else None)
-                plt.legend()
+                if labels:
+                    plt.legend()
         else:
             series.plot('add')
 

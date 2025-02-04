@@ -2,4 +2,5 @@
 *.ipynb_checkpoints
 *.venv
 *.pth
-exp2/data/
+*.DS_Store
+

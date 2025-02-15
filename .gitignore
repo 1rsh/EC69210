@@ -3,4 +3,5 @@
 *.venv
 *.pth
 *.DS_Store
+*.pt
 
